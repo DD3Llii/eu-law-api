@@ -1,33 +1,40 @@
-import os, pickle, requests, numpy as np
+import os
+import pickle
+import numpy as np
 from fastapi import FastAPI
+from google import genai
 
 app = FastAPI()
 
-# 1. We stappen over naar een puur 'Embedding' model (geen similarity gedoe)
-HF_TOKEN = os.getenv("HF_TOKEN")
-API_URL = "https://router.huggingface.co/hf-inference/models/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+# 1. Google Configuratie
+API_KEY = os.getenv("GOOGLE_API_KEY")
+client = genai.Client(api_key=API_KEY)
 
-# 2. Laden data
+# 2. Data inladen
 with open('data.pkl', 'rb') as f:
     db = pickle.load(f)
-    chunks, embeddings = db['chunks'], np.array(db['embeddings']).astype('float32')
+    chunks = db['chunks']
+    embeddings = np.array(db['embeddings']).astype('float32')
 
 @app.get("/")
-def home(): return {"status": "Online"}
+def home():
+    return {"status": "Online", "engine": "Google Gemini"}
 
 @app.get("/ask")
 def ask(query: str):
-    # De 'wait_for_model' is cruciaal om de timeout te voorkomen
-    r = requests.post(API_URL, headers=headers, json={"inputs": query, "options": {"wait_for_model": True}})
+    # Stap 1: Vraag omzetten naar vector via Google
+    res = client.models.embed_content(
+        model="text-embedding-004", 
+        contents=query, 
+        config={'task_type': 'RETRIEVAL_QUERY'}
+    )
+    query_vector = np.array(res.embeddings[0].values).astype('float32')
     
-    # Als Hugging Face getallen terugstuurt, rekenen we direct uit
-    if r.status_code == 200:
-        vector = np.array(r.json()).astype('float32')
-        if vector.ndim > 1: vector = vector[0]
-        
-        distances = np.linalg.norm(embeddings - vector, axis=1)
-        indices = np.argsort(distances)[:3]
-        return {"query": query, "results": [chunks[i] for i in indices]}
+    # Stap 2: Zoeken met Numpy
+    distances = np.linalg.norm(embeddings - query_vector, axis=1)
+    indices = np.argsort(distances)[:3]
     
-    return {"status": "error", "hf_response": r.json()}
+    return {
+        "query": query,
+        "results": [chunks[i] for i in indices]
+    }
