@@ -11,29 +11,25 @@ with open('data.pkl', 'rb') as f:
     chunks = data['chunks']
     embeddings = np.array(data['embeddings']).astype('float32')
 
+# DE NIEUWE ROUTER URL
 API_URL = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2"
 
 @app.get("/")
 def home():
-    return {"status": "Online - Safe Mode Active"}
+    return {"status": "Milieuwet API Online - Router Mode"}
 
 @app.get("/ask")
 def ask_law(query: str):
+    # Roep de AI-motor aan
     response = requests.post(API_URL, json={"inputs": query})
     result = response.json()
     
-    # VEILIGHEIDSFILTER: Check of resultaat een foutmelding is van Hugging Face
+    # Check of Hugging Face een fout geeft of nog aan het laden is
     if isinstance(result, dict) and "error" in result:
-        return {
-            "query": query, 
-            "top_answers": ["De AI-motor wordt momenteel geladen bij Hugging Face. Probeer het over 20 seconden nogmaals."],
-            "debug_info": result
-        }
+        return {"query": query, "top_answers": ["AI start nog op. Probeer over 10 seconden opnieuw."], "debug": result}
     
-    # Als alles goed is, verwerk de vector
+    # Verwerk de resultaten als alles goed gaat
     query_vector = np.array(result).astype('float32')
-    
-    # Zoeken met Numpy
     distances = np.linalg.norm(embeddings - query_vector, axis=1)
     top_indices = np.argsort(distances)[:3]
     
