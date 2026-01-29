@@ -3,15 +3,16 @@ import pickle
 import numpy as np
 import requests
 import os
+import time
 
 app = FastAPI()
 
-# 1. Gebruik de nieuwe verplichte Router URL
+# 1. Configuraties
 HF_TOKEN = os.getenv("HF_TOKEN")
 API_URL = "https://router.huggingface.co/hf-inference/models/sentence-transformers/all-MiniLM-L6-v2"
 headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
-# 2. Database inladen (Milieuwet)
+# 2. Database inladen
 with open('data.pkl', 'rb') as f:
     data = pickle.load(f)
     chunks = data['chunks']
@@ -19,22 +20,28 @@ with open('data.pkl', 'rb') as f:
 
 @app.get("/")
 def home():
-    return {"status": "Online", "engine": "Hugging Face Router"}
+    return {"status": "Online", "mode": "Extended Timeout Enabled"}
 
 @app.get("/ask")
 def ask_law(query: str):
-    # Payload voor de nieuwe router
+    # Payload met expliciete opdracht om te wachten op het model
     payload = {"inputs": query, "options": {"wait_for_model": True}}
     
-    response = requests.post(API_URL, headers=headers, json=payload)
-    result = response.json()
-    
-    # Foutafhandeling voor de router-response
-    if isinstance(result, dict) and "error" in result:
-        return {"error": "Router melding", "details": result}
-    
-    # Vectorvergelijking
+    # We geven de AI-motor tot 60 seconden de tijd (was 15)
+    try:
+        response = requests.post(API_URL, headers=headers, json=payload, timeout=60)
+        response.raise_for_status()
+        result = response.json()
+    except requests.exceptions.Timeout:
+        return {"error": "De AI-motor doet er te lang over. Klik nogmaals op 'Test Endpoint' om de motor warm te houden."}
+    except Exception as e:
+        return {"error": "AI-motor fout", "details": str(e)}
+
+    # Vectorverwerking
     query_vector = np.array(result).astype('float32')
+    if len(query_vector.shape) > 1:
+        query_vector = query_vector[0]
+
     distances = np.linalg.norm(embeddings - query_vector, axis=1)
     top_indices = np.argsort(distances)[:3]
     
