@@ -2,31 +2,32 @@ from fastapi import FastAPI
 import pickle
 import numpy as np
 import requests
-import faiss
+import os
 
 app = FastAPI()
 
-# Jouw data laden
-with open('data.pkl', 'rb') as f:
+# Laad de data (nu zonder FAISS objecten)
+with open('data_ai_act.pkl', 'rb') as f:
     data = pickle.load(f)
     chunks = data['chunks']
-    index = data['index']
+    embeddings = np.array(data['embeddings']).astype('float32')
 
-# De externe AI-motor (gratis van Hugging Face)
 API_URL = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
 
 @app.get("/")
 def home():
-    return {"status": "Online via External AI Engine"}
+    return {"status": "AI Act Service Online (Numpy Mode)"}
 
 @app.get("/ask")
 def ask_law(query: str):
-    # Vraag versturen naar de externe motor
+    # 1. Haal vector op bij Hugging Face
     response = requests.post(API_URL, json={"inputs": query})
-    query_vector = response.json()
+    query_vector = np.array(response.json()).astype('float32')
     
-    # Zoeken in je 836 blokken
-    D, I = index.search(np.array([query_vector]).astype('float32'), k=3)
-    answers = [chunks[i] for i in I[0]]
+    # 2. Zoek met Numpy (Euclidean distance)
+    # Dit vervangt de FAISS-index en is superstabiel
+    distances = np.linalg.norm(embeddings - query_vector, axis=1)
+    top_indices = np.argsort(distances)[:3]
     
+    answers = [chunks[i] for i in top_indices]
     return {"query": query, "top_answers": answers}
