@@ -5,6 +5,7 @@ import requests
 
 app = FastAPI()
 
+# Milieudata laden
 with open('data.pkl', 'rb') as f:
     data = pickle.load(f)
     chunks = data['chunks']
@@ -19,9 +20,20 @@ def home():
 @app.get("/ask")
 def ask_law(query: str):
     response = requests.post(API_URL, json={"inputs": query})
-    query_vector = np.array(response.json()).astype('float32')
+    result = response.json()
     
-    # Zoeken met Numpy (vlijmscherp en crasht nooit)
+    # VEILIGHEIDSFILTER: Check of resultaat een foutmelding is van Hugging Face
+    if isinstance(result, dict) and "error" in result:
+        return {
+            "query": query, 
+            "top_answers": ["De AI-motor wordt momenteel geladen bij Hugging Face. Probeer het over 20 seconden nogmaals."],
+            "debug_info": result
+        }
+    
+    # Als alles goed is, verwerk de vector
+    query_vector = np.array(result).astype('float32')
+    
+    # Zoeken met Numpy
     distances = np.linalg.norm(embeddings - query_vector, axis=1)
     top_indices = np.argsort(distances)[:3]
     
