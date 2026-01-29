@@ -7,7 +7,7 @@ import faiss
 app = FastAPI()
 
 # 1. Het model laden (het 'brein')
-model = SentenceTransformer('all-MiniLM-L6-v2')
+model = SentenceTransformer('paraphrase-albert-small-v2')
 
 # 2. Jouw product laden (de data)
 with open('data.pkl', 'rb') as f:
