@@ -1,31 +1,32 @@
 from fastapi import FastAPI
 import pickle
 import numpy as np
-from sentence_transformers import SentenceTransformer
+import requests
 import faiss
-import os
-
-# Dwing de server om minder geheugen te gebruiken
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
 
 app = FastAPI()
 
-# Het allerkleinste model dat er bestaat
-model = SentenceTransformer('paraphrase-MiniLM-L3-v2', device='cpu')
-
+# Jouw data laden
 with open('data.pkl', 'rb') as f:
     data = pickle.load(f)
     chunks = data['chunks']
     index = data['index']
 
+# De externe AI-motor (gratis van Hugging Face)
+API_URL = "https://api-inference.huggingface.co/models/sentence-transformers/all-MiniLM-L6-v2"
+
 @app.get("/")
 def home():
-    return {"status": "Online en klaar voor gebruik."}
+    return {"status": "Online via External AI Engine"}
 
 @app.get("/ask")
 def ask_law(query: str):
-    query_vector = model.encode([query])
-    D, I = index.search(np.array(query_vector).astype('float32'), k=3)
+    # Vraag versturen naar de externe motor
+    response = requests.post(API_URL, json={"inputs": query})
+    query_vector = response.json()
+    
+    # Zoeken in je 836 blokken
+    D, I = index.search(np.array([query_vector]).astype('float32'), k=3)
     answers = [chunks[i] for i in I[0]]
+    
     return {"query": query, "top_answers": answers}
